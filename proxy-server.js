@@ -7,6 +7,10 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+app.get("/", (req, res) => {
+  res.send("Proxy server is running");
+});
+
 // Rotate IP via Proxyno1, dynamic key
 app.get("/change-ip", async (req, res) => {
   const { key } = req.query;
