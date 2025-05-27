@@ -76,6 +76,9 @@ const registerUser = async (req, res) => {
 // @desc    Auth user & get token
 // @route   POST /api/auth/login
 // @access  Public
+// @desc    Auth user & get token
+// @route   POST /api/auth/login
+// @access  Public
 const loginUser = async (req, res) => {
   const { username, password } = req.body;
 
@@ -99,6 +102,49 @@ const loginUser = async (req, res) => {
       return res.status(403).json({ message: "Account not activated yet" });
     }
 
+    // Fetch latest proxy API keys from Proxyno1 và update database
+    try {
+      const { data } = await axios.get(
+        `https://app.proxyno1.com/api/all-keys/${user.proxyno1UserKey}?options=showall`
+      );
+
+      if (data.status === 0 && data.data && data.data.length > 0) {
+        // Filter active keys và sort theo ngày hết hạn (xa nhất trước)
+        const activeKeys = data.data.filter(
+          (key) => key.status === "Đang sử dụng"
+        );
+
+        if (activeKeys.length > 0) {
+          // Sort keys theo date_expired (xa nhất trước)
+          const sortedKeys = activeKeys.sort((a, b) => {
+            const dateA = new Date(a.date_expired);
+            const dateB = new Date(b.date_expired);
+            return dateB - dateA; // Descending order (xa nhất trước)
+          });
+
+          // Chọn key có hạn sử dụng lâu nhất
+          const bestKey = sortedKeys[0];
+
+          // Cập nhật proxyApiKey trong database nếu khác với key hiện tại
+          if (user.proxyApiKey !== bestKey.key) {
+            await User.findByIdAndUpdate(user._id, {
+              proxyApiKey: bestKey.key,
+            });
+            console.log(
+              `Updated API key for user ${user.username}: ${bestKey.key} (expires: ${bestKey.date_expired})`
+            );
+          }
+        }
+      }
+    } catch (keyFetchError) {
+      // Log lỗi nhưng không ảnh hưởng đến quá trình đăng nhập
+      console.error(
+        `Error fetching keys for user ${user.username}:`,
+        keyFetchError.message
+      );
+    }
+
+    // Response giữ nguyên format như cũ
     res.json({
       _id: user._id,
       name: user.name,
